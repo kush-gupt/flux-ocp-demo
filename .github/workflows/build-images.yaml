@@ -30,12 +30,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install OpenShift tools
-        uses: redhat-actions/openshift-tools-installer@v1
-        with:
-          source: github
-          oc: latest
-
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
         uses: redhat-actions/podman-login@v1
@@ -82,12 +76,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install OpenShift tools
-        uses: redhat-actions/openshift-tools-installer@v1
-        with:
-          source: github
-          oc: latest
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
