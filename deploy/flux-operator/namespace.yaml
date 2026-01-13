@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-operator
+  labels:
+    app.kubernetes.io/name: flux-operator
+    app.kubernetes.io/component: operator

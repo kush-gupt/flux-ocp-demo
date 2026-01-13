@@ -1,0 +1,179 @@
+# Laghos with GLVis streaming support for Sedov Blast Wave visualization
+# Based on converged-computing/flux-apps-helm laghos Dockerfile
+# Using CentOS Stream 10 with Spack
+
+FROM quay.io/centos/centos:stream10 AS builder
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN dnf update -y && dnf install -y \
+    autoconf \
+    automake \
+    cmake \
+    git \
+    python3 \
+    python3-pip \
+    bind-utils \
+    numactl-devel \
+    libgomp \
+    openssh-server \
+    openssh-clients \
+    gcc \
+    gcc-c++ \
+    gcc-gfortran \
+    make \
+    unzip \
+    which \
+    patch \
+    xz \
+    bzip2 \
+    file \
+    diffutils \
+    findutils \
+    curl \
+    wget \
+    libatomic \
+    && dnf clean all
+
+# Create spack environment with Flux and Laghos
+RUN mkdir /opt/spack-environment \
+    && (echo "spack:" \
+    &&  echo "  specs:" \
+    &&  echo "  - flux-sched" \
+    &&  echo "  - flux-core" \
+    &&  echo "  - pmix@4.2.2" \
+    &&  echo "  - flux-pmix" \
+    &&  echo "  - laghos" \
+    &&  echo "  concretizer:" \
+    &&  echo "    unify: true" \
+    &&  echo "  config:" \
+    &&  echo "    install_tree: /opt/software" \
+    &&  echo "  view: /opt/view") > /opt/spack-environment/spack.yaml
+
+# Install Spack and build all dependencies
+RUN cd /opt/spack-environment \
+    && git clone --depth 1 --branch v0.22.1 https://github.com/spack/spack.git \
+    && . spack/share/spack/setup-env.sh \
+    && spack env activate . \
+    && spack external find openssh cmake python \
+    && spack install --reuse --fail-fast \
+    && spack gc -y
+
+# Set up environment activation script
+RUN cd /opt/spack-environment \
+    && . spack/share/spack/setup-env.sh \
+    && spack env activate --sh -d . >> /etc/profile.d/z10_spack_environment.sh
+
+# Clone Laghos data files
+RUN git clone https://github.com/CEED/Laghos /opt/laghos
+
+WORKDIR /opt
+EXPOSE 22
+
+# Runtime stage - minimal image
+FROM quay.io/centos/centos:stream10
+
+LABEL org.opencontainers.image.source="https://github.com/kush-gupt/flux-ocp-demo"
+LABEL org.opencontainers.image.description="Laghos with GLVis streaming for Sedov Blast Wave visualization"
+LABEL org.opencontainers.image.licenses="BSD-3-Clause"
+
+# Copy built artifacts from builder
+COPY --from=builder /opt/spack-environment /opt/spack-environment
+COPY --from=builder /opt/software /opt/software
+COPY --from=builder /opt/view /opt/view
+COPY --from=builder /etc/profile.d/z10_spack_environment.sh /etc/profile.d/z10_spack_environment.sh
+COPY --from=builder /opt/laghos /opt/laghos
+
+# Install runtime dependencies
+RUN dnf update -y && dnf install -y --no-install-recommends \
+    libatomic \
+    numactl-libs \
+    libgomp \
+    python3 \
+    openssh-server \
+    openssh-clients \
+    bind-utils \
+    curl \
+    git \
+    hostname \
+    procps-ng \
+    nmap-ncat \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf/*
+
+# Install oras for artifact management
+RUN export VERSION="1.1.0" && \
+    curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz" && \
+    mkdir -p oras-install/ && \
+    tar -zxf oras_${VERSION}_*.tar.gz -C oras-install/ && \
+    mv oras-install/oras /usr/local/bin/ && \
+    rm -rf oras_${VERSION}_*.tar.gz oras-install/
+
+# Create entrypoint script for Sedov blast with GLVis streaming
+RUN cat > /opt/run-sedov.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "=== Laghos Sedov Blast Wave Demo ==="
+echo "Initializing environment..."
+
+# Source the spack environment
+. /etc/profile.d/z10_spack_environment.sh
+
+# Default parameters
+GLVIS_HOST=${GLVIS_HOST:-glvis-server}
+GLVIS_PORT=${GLVIS_PORT:-19916}
+RS=${RS:-3}
+TF=${TF:-0.8}
+VS=${VS:-50}
+DEV=${DEV:-cpu}
+
+echo "GLVis server: ${GLVIS_HOST}:${GLVIS_PORT}"
+echo "Parameters: RS=${RS}, TF=${TF}, VS=${VS}"
+
+# Wait for GLVis server to be ready (optional)
+if [ "${WAIT_FOR_GLVIS:-true}" = "true" ]; then
+    echo "Waiting for GLVis server..."
+    for i in {1..30}; do
+        if nc -z ${GLVIS_HOST} ${GLVIS_PORT} 2>/dev/null; then
+            echo "GLVis server is ready!"
+            break
+        fi
+        echo "Attempt $i: GLVis server not ready, waiting..."
+        sleep 2
+    done
+fi
+
+cd /opt/laghos
+
+# Run Laghos Sedov blast simulation
+# -p 1: Sedov blast problem
+# -dim 2: 2D simulation  
+# -rs: Refinement level
+# -tf: Final time
+# -pa: Partial assembly (efficient)
+# -vis: Enable GLVis visualization
+# -vh: GLVis host
+# -vp: GLVis port
+# -vs: Visualization steps interval
+echo "Running Laghos Sedov blast simulation..."
+exec laghos \
+    -p 1 \
+    -dim 2 \
+    -rs ${RS} \
+    -tf ${TF} \
+    -pa \
+    -vis \
+    -vh ${GLVIS_HOST} \
+    -vp ${GLVIS_PORT} \
+    -vs ${VS} \
+    --dev ${DEV} \
+    "$@"
+EOF
+RUN chmod +x /opt/run-sedov.sh
+
+WORKDIR /opt/laghos
+EXPOSE 22
+
+# Default command runs Sedov blast simulation
+CMD ["/opt/run-sedov.sh"]

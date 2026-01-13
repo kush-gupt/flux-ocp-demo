@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: glvis-server
+  namespace: laghos-demo
+  labels:
+    app: glvis-server
+    app.kubernetes.io/name: glvis-server
+    app.kubernetes.io/component: visualization
+    app.kubernetes.io/part-of: laghos-sedov-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: glvis-server
+  template:
+    metadata:
+      labels:
+        app: glvis-server
+        app.kubernetes.io/name: glvis-server
+    spec:
+      containers:
+        - name: glvis-server
+          image: ghcr.io/kush-gupt/glvis-js-server:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: websocket
+              containerPort: 8080
+              protocol: TCP
+            - name: glvis-socket
+              containerPort: 19916
+              protocol: TCP
+          env:
+            - name: HTTP_PORT
+              value: "8000"
+            - name: WS_PORT
+              value: "8080"
+            - name: GLVIS_PORT
+              value: "19916"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5

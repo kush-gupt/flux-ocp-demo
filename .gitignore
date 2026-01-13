@@ -1,0 +1,34 @@
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+*.log
+tmp/
+temp/
+
+# Secrets (never commit these)
+*.pem
+*.key
+secrets/
+.env
+.env.*
+
+# Helm chart dependencies
+charts/
+Chart.lock
+
+# Generated manifests
+*.generated.yaml

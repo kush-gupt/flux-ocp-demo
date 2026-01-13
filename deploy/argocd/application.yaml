@@ -1,0 +1,76 @@
+# ArgoCD Application for Laghos Sedov Demo
+# Provides GitOps-based deployment and management
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: flux-operator
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: laghos-sedov-demo
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kush-gupt/flux-ocp-demo.git
+    targetRevision: main
+    path: deploy/flux-operator
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: flux-operator
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: glvis-server
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: laghos-sedov-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kush-gupt/flux-ocp-demo.git
+    targetRevision: main
+    path: deploy/glvis-server
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: laghos-demo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: laghos-sedov
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: laghos-sedov-demo
+  annotations:
+    # Deploy after flux-operator and glvis-server are ready
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kush-gupt/flux-ocp-demo.git
+    targetRevision: main
+    path: deploy/laghos-sedov
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: laghos-demo
+  syncPolicy:
+    # Manual sync - user triggers simulation
+    automated: {}
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,126 @@
+name: Build and Push Container Images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'containers/**'
+      - '.github/workflows/build-images.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'containers/**'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}
+
+jobs:
+  build-laghos-sedov:
+    name: Build Laghos Sedov Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install OpenShift tools
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          source: github
+          oc: latest
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Laghos Sedov image with Buildah
+        id: build-laghos
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: laghos-sedov
+          tags: |
+            latest
+            ${{ github.sha }}
+          containerfiles: |
+            ./containers/laghos-sedov/Containerfile
+          context: ./containers/laghos-sedov
+          layers: true
+          oci: true
+
+      - name: Push Laghos Sedov image to GHCR
+        if: github.event_name != 'pull_request'
+        id: push-laghos
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-laghos.outputs.image }}
+          tags: ${{ steps.build-laghos.outputs.tags }}
+          registry: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}
+
+      - name: Print image URL
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "Laghos Sedov image pushed to: ${{ steps.push-laghos.outputs.registry-paths }}"
+
+  build-glvis-server:
+    name: Build GLVis-JS Server Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install OpenShift tools
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          source: github
+          oc: latest
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build GLVis-JS Server image with Buildah
+        id: build-glvis
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: glvis-js-server
+          tags: |
+            latest
+            ${{ github.sha }}
+          containerfiles: |
+            ./containers/glvis-js-server/Containerfile
+          context: ./containers/glvis-js-server
+          layers: true
+          oci: true
+
+      - name: Push GLVis-JS Server image to GHCR
+        if: github.event_name != 'pull_request'
+        id: push-glvis
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-glvis.outputs.image }}
+          tags: ${{ steps.build-glvis.outputs.tags }}
+          registry: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}
+
+      - name: Print image URL
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "GLVis-JS Server image pushed to: ${{ steps.push-glvis.outputs.registry-paths }}"

@@ -1,0 +1,117 @@
+# Laghos Sedov Blast Wave MiniCluster
+# Runs Laghos simulation with GLVis visualization streaming
+apiVersion: flux-framework.org/v1alpha2
+kind: MiniCluster
+metadata:
+  name: laghos-sedov
+  namespace: laghos-demo
+  labels:
+    app: laghos-sedov
+    app.kubernetes.io/name: laghos-sedov
+    app.kubernetes.io/component: simulation
+    app.kubernetes.io/part-of: laghos-sedov-demo
+spec:
+  # Small demo: 2 pods for MPI job
+  size: 2
+  
+  # Job will complete after simulation finishes
+  interactive: false
+  
+  # Logging configuration
+  logging:
+    quiet: false
+    strict: false
+    zeromq: false
+  
+  # Network configuration for MPI
+  network:
+    headlessName: laghos-sedov
+  
+  # Pod configuration
+  pod:
+    # Allow scheduling on worker nodes
+    nodeSelector: {}
+  
+  # Container specifications
+  containers:
+    - image: ghcr.io/kush-gupt/laghos-sedov:latest
+      imagePullPolicy: Always
+      
+      # Flux configuration
+      runFlux: true
+      
+      # Working directory
+      workingDir: /opt/laghos
+      
+      # Environment variables for GLVis connection
+      environment:
+        GLVIS_HOST: glvis-server.laghos-demo.svc.cluster.local
+        GLVIS_PORT: "19916"
+        # Sedov blast parameters
+        RS: "3"
+        TF: "0.8"
+        VS: "50"
+        DEV: "cpu"
+      
+      # Command to run Laghos with Sedov blast problem
+      # Uses Flux to distribute across MPI ranks
+      command: |
+        #!/bin/bash
+        set -ex
+        
+        echo "=== Laghos Sedov Blast Wave Demo ==="
+        echo "Starting simulation with GLVis visualization..."
+        echo "GLVis server: ${GLVIS_HOST}:${GLVIS_PORT}"
+        
+        # Source the spack environment
+        source /etc/profile.d/z10_spack_environment.sh
+        
+        # Wait for GLVis server to be ready
+        echo "Waiting for GLVis server..."
+        for i in {1..30}; do
+          if nc -z ${GLVIS_HOST} ${GLVIS_PORT} 2>/dev/null; then
+            echo "GLVis server is ready!"
+            break
+          fi
+          echo "Attempt $i: GLVis server not ready, waiting..."
+          sleep 2
+        done
+        
+        cd /opt/laghos
+        
+        # Run Laghos Sedov blast simulation with MPI
+        # -p 1: Sedov blast problem
+        # -dim 2: 2D simulation
+        # -rs 3: Refinement level
+        # -tf 0.8: Final time
+        # -pa: Partial assembly (efficient)
+        # -vis: Enable GLVis visualization
+        # -vs 50: Visualization steps interval
+        echo "Running Laghos Sedov blast simulation..."
+        flux run -N 2 -n 2 ./laghos \
+          -p 1 \
+          -dim 2 \
+          -rs ${RS:-3} \
+          -tf ${TF:-0.8} \
+          -pa \
+          -vis \
+          -vh ${GLVIS_HOST} \
+          -vp ${GLVIS_PORT} \
+          -vs ${VS:-50} \
+          --dev ${DEV:-cpu}
+        
+        echo "=== Simulation Complete ==="
+      
+      # Resource requests
+      resources:
+        requests:
+          memory: "1Gi"
+          cpu: "1"
+        limits:
+          memory: "2Gi"
+          cpu: "2"
+      
+      # Security context for MPI
+      securityContext:
+        addCapabilities:
+          - SYS_PTRACE

@@ -1,0 +1,74 @@
+# Security Context Constraints for Flux Operator on OpenShift
+# Flux MiniCluster pods require elevated privileges for MPI communication
+---
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: flux-scc
+  annotations:
+    kubernetes.io/description: >-
+      SCC for Flux Framework MiniCluster pods. Allows MPI communication
+      and Flux broker operations required for HPC workloads.
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+allowedCapabilities:
+  - SYS_PTRACE
+  - NET_ADMIN
+defaultAddCapabilities: []
+fsGroup:
+  type: RunAsAny
+groups: []
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities: []
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+users: []
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+---
+# ClusterRoleBinding to allow flux-operator service account to use the SCC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flux-scc-role
+rules:
+  - apiGroups:
+      - security.openshift.io
+    resourceNames:
+      - flux-scc
+      - anyuid
+    resources:
+      - securitycontextconstraints
+    verbs:
+      - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flux-operator-scc-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flux-scc-role
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: laghos-demo
+  - kind: ServiceAccount
+    name: operator-controller-manager
+    namespace: operator-system

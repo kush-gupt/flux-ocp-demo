@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: glvis-server
+  namespace: laghos-demo
+  labels:
+    app: glvis-server
+    app.kubernetes.io/name: glvis-server
+    app.kubernetes.io/component: visualization
+spec:
+  selector:
+    app: glvis-server
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+    - name: websocket
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: glvis-socket
+      port: 19916
+      targetPort: 19916
+      protocol: TCP
+  type: ClusterIP
