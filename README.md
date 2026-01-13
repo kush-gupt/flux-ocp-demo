@@ -12,9 +12,9 @@ This demo showcases:
 - **OpenShift 4.20**: Enterprise Kubernetes platform with integrated security and routing
 
 ```
-┌───────────────────────────────────────────────────────────┐
-│                    OpenShift 4.20 Cluster                 │
-│                                                           │
+┌────────────────────────────────────────────────────────────┐
+│                    OpenShift 4.20 Cluster                  │
+│                                                            │
 │  ┌─────────────────┐     ┌─────────────────────────────┐   │
 │  │  Flux Operator  │     │     Laghos MiniCluster      │   │
 │  │                 │────▶│  ┌─────────┐  ┌─────────┐   │   │
