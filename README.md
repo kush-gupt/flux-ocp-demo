@@ -12,9 +12,9 @@ This demo showcases:
 - **OpenShift 4.20**: Enterprise Kubernetes platform with integrated security and routing
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    OpenShift 4.20 Cluster                   │
-│                                                             │
+┌───────────────────────────────────────────────────────────┐
+│                    OpenShift 4.20 Cluster                 │
+│                                                           │
 │  ┌─────────────────┐     ┌─────────────────────────────┐   │
 │  │  Flux Operator  │     │     Laghos MiniCluster      │   │
 │  │                 │────▶│  ┌─────────┐  ┌─────────┐   │   │
@@ -90,7 +90,7 @@ Open this URL in your browser to see the live Sedov blast wave visualization.
 
 ## Manual Deployment
 
-If you prefer to deploy components individually:
+If you'd prefer to deploy components individually:
 
 ### Install Flux Operator
 
@@ -178,31 +178,6 @@ flux-ocp-demo/
 ├── scripts/
 │   └── demo.sh                  # Demo deployment script
 └── README.md
-```
-
-## Troubleshooting
-
-### Pods not starting
-
-Check SCC permissions:
-
-```bash
-oc get pods -n laghos-demo -o yaml | grep -A5 securityContext
-oc adm policy who-can use scc flux-scc
-```
-
-### GLVis not receiving data
-
-Verify network connectivity:
-
-```bash
-oc exec -it <laghos-pod> -n laghos-demo -- nc -zv glvis-server 19916
-```
-
-### Viewing simulation logs
-
-```bash
-oc logs -f -l job-name=laghos-sedov -n laghos-demo
 ```
 
 ## References
