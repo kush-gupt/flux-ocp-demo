@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""
+GLVis WebSocket Proxy Server
+Bridges GLVis socket streams (port 19916) to WebSocket connections for browser clients
+"""
+
+import asyncio
+import json
+import os
+import logging
+from aiohttp import web
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('glvis-proxy')
+
+# Configuration
+GLVIS_PORT = int(os.environ.get('GLVIS_PORT', 19916))
+HTTP_PORT = int(os.environ.get('HTTP_PORT', 8000))
+HOST = os.environ.get('HOST', '0.0.0.0')
+
+# Store active WebSocket connections and latest data
+ws_clients = set()
+latest_data = []
+data_lock = asyncio.Lock()
+
+async def handle_glvis_connection(reader, writer):
+    """Handle incoming GLVis socket connection from Laghos"""
+    addr = writer.get_extra_info('peername')
+    logger.info(f"GLVis connection from {addr}")
+    
+    try:
+        buffer = b""
+        while True:
+            data = await reader.read(65536)
+            if not data:
+                break
+            
+            buffer += data
+            
+            # Store the data
+            async with data_lock:
+                latest_data.append(buffer.decode('utf-8', errors='replace'))
+                if len(latest_data) > 100:  # Keep last 100 frames
+                    latest_data.pop(0)
+            
+            # Broadcast to all WebSocket clients
+            if ws_clients:
+                message = json.dumps({
+                    'type': 'glvis_data',
+                    'data': buffer.decode('utf-8', errors='replace'),
+                    'source': str(addr),
+                    'frame': len(latest_data)
+                })
+                dead_clients = set()
+                for ws in ws_clients:
+                    try:
+                        await ws.send_str(message)
+                    except Exception as e:
+                        logger.warning(f"Failed to send to client: {e}")
+                        dead_clients.add(ws)
+                ws_clients.difference_update(dead_clients)
+            
+            buffer = b""
+            
+    except Exception as e:
+        logger.error(f"Error handling GLVis client {addr}: {e}")
+    finally:
+        writer.close()
+        await writer.wait_closed()
+        logger.info(f"GLVis client {addr} disconnected")
+
+async def websocket_handler(request):
+    """Handle WebSocket connections from browser clients"""
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    
+    ws_clients.add(ws)
+    logger.info(f"WebSocket client connected, total clients: {len(ws_clients)}")
+    
+    try:
+        # Send any cached data
+        async with data_lock:
+            if latest_data:
+                for i, data in enumerate(latest_data[-5:]):  # Send last 5 frames
+                    await ws.send_str(json.dumps({
+                        'type': 'glvis_data',
+                        'data': data,
+                        'source': 'cache',
+                        'frame': i
+                    }))
+        
+        async for msg in ws:
+            if msg.type == web.WSMsgType.TEXT:
+                try:
+                    data = json.loads(msg.data)
+                    if data.get('type') == 'ping':
+                        await ws.send_str(json.dumps({'type': 'pong'}))
+                except json.JSONDecodeError:
+                    pass
+            elif msg.type == web.WSMsgType.ERROR:
+                logger.error(f'WebSocket error: {ws.exception()}')
+                
+    finally:
+        ws_clients.discard(ws)
+        logger.info(f"WebSocket client disconnected, remaining: {len(ws_clients)}")
+    
+    return ws
+
+async def status_handler(request):
+    """Health check endpoint"""
+    return web.json_response({
+        'status': 'ok',
+        'ws_clients': len(ws_clients),
+        'frames_received': len(latest_data)
+    })
+
+async def start_glvis_server():
+    """Start the GLVis socket server"""
+    server = await asyncio.start_server(
+        handle_glvis_connection, HOST, GLVIS_PORT
+    )
+    logger.info(f"GLVis socket server listening on {HOST}:{GLVIS_PORT}")
+    async with server:
+        await server.serve_forever()
+
+async def start_web_server():
+    """Start the HTTP/WebSocket server"""
+    app = web.Application()
+    app.router.add_get('/ws', websocket_handler)
+    app.router.add_get('/status', status_handler)
+    app.router.add_static('/', '/opt/glvis-js/live', show_index=True)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, HOST, HTTP_PORT)
+    await site.start()
+    logger.info(f"HTTP server listening on http://{HOST}:{HTTP_PORT}")
+    logger.info(f"WebSocket endpoint at ws://{HOST}:{HTTP_PORT}/ws")
+    
+    # Keep running
+    while True:
+        await asyncio.sleep(3600)
+
+async def main():
+    """Main entry point"""
+    logger.info("Starting GLVis WebSocket Proxy Server")
+    logger.info(f"Configuration: HTTP={HTTP_PORT}, GLVis={GLVIS_PORT}")
+    
+    await asyncio.gather(
+        start_glvis_server(),
+        start_web_server()
+    )
+
+if __name__ == '__main__':
+    asyncio.run(main())
