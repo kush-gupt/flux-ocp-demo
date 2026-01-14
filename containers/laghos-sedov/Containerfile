@@ -3,7 +3,6 @@
 # Using CentOS Stream 10 with Spack
 
 FROM quay.io/centos/centos:stream10 AS builder
-ENV DEBIAN_FRONTEND=noninteractive
 
 # Install build dependencies
 RUN dnf update -y && dnf install -y \
@@ -33,6 +32,10 @@ RUN dnf update -y && dnf install -y \
     curl \
     wget \
     libatomic \
+    tar \
+    gzip \
+    perl \
+    pkgconf-pkg-config \
     && dnf clean all
 
 # Create spack environment with Flux and Laghos
@@ -85,7 +88,7 @@ COPY --from=builder /etc/profile.d/z10_spack_environment.sh /etc/profile.d/z10_s
 COPY --from=builder /opt/laghos /opt/laghos
 
 # Install runtime dependencies
-RUN dnf update -y && dnf install -y --no-install-recommends \
+RUN dnf update -y && dnf install -y \
     libatomic \
     numactl-libs \
     libgomp \
